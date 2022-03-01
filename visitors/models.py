@@ -12,6 +12,7 @@ from django.utils.timezone import now as tz_now
 from django.utils.translation import gettext_lazy as _lazy
 
 from .settings import VISITOR_QUERYSTRING_KEY, VISITOR_TOKEN_EXPIRY
+from django.core.exceptions import ValidationError
 
 
 class InvalidVisitorPass(Exception):
@@ -51,6 +52,15 @@ class Visitor(models.Model):
             "Set to False to disable the visitor link and prevent further access."
         ),
     )
+    max_number_of_visits = models.IntegerField(
+        default=3,
+        null=True,
+        help_text=_lazy(
+            "After the visitor uses the link this amount of times, the link becomes disabled"
+        ),
+    )
+    # Set default to 3, assuming a default of infinite access is not desirable
+    # Allows null value, which is an infinite amount of times to access a link
 
     class Meta:
         verbose_name = "Visitor pass"
@@ -90,6 +100,19 @@ class Visitor(models.Model):
         """Return True if the token is active and not yet expired."""
         return self.is_active and not self.has_expired
 
+    @property
+    def is_within_max_visits(self) -> bool:
+        """Return True if the token has been accessed less than the maximum permitted number"""
+        # if None, token can be accessed unlimited number of times
+        if not self.max_number_of_visits:
+            return True
+        return self.number_of_visits < self.max_number_of_visits
+
+    @property
+    def number_of_visits(self) -> bool:
+        """Return number of times the visitor has been logged as accessing the link"""
+        return VisitorLog.objects.filter(visitor=self).count()
+
     def validate(self) -> None:
         """Raise InvalidVisitorPass if inactive or expired."""
         if not self.is_active:
@@ -104,6 +127,7 @@ class Visitor(models.Model):
         Useful for template context and session data.
 
         """
+        # Could add the attempts remaining to JSON?
         return {
             "uuid": str(self.uuid),
             "first_name": self.first_name,
@@ -133,6 +157,14 @@ class Visitor(models.Model):
         self.is_active = True
         self.expires_at = tz_now() + self.DEFAULT_TOKEN_EXPIRY
         self.save()
+
+    def save(self, *args, **kwargs):
+        # max number of visits should not be negative, and 0 makes no sense!
+        if self.max_number_of_visits is not None and self.max_number_of_visits <= 0:
+            raise ValidationError("max_number_of_visits must be >= 1")
+            # ^ would do this using validators in a proper implementation
+
+        super().save(*args, **kwargs)
 
 
 class VisitorLogManager(models.Manager):

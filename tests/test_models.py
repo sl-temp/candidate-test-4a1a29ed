@@ -5,6 +5,7 @@ import pytest
 from django.utils.timezone import now as tz_now
 
 from visitors.models import InvalidVisitorPass, Visitor
+from django.core.exceptions import ValidationError
 
 TEST_UUID: str = "68201321-9dd2-4fb3-92b1-24367f38a7d6"
 
@@ -108,3 +109,26 @@ def test_has_expired(expires_at, has_expired):
     visitor = Visitor()
     visitor.expires_at = expires_at
     assert visitor.has_expired == has_expired
+
+
+def test_default_max_limit_is_3():
+    visitor = Visitor()
+    assert visitor.max_number_of_visits == 3
+
+
+@pytest.mark.django_db
+def test_when_max_number_of_visits_null_then_is_within_max_visits_true():
+    visitor = Visitor(max_number_of_visits=None)
+    assert visitor.is_within_max_visits
+
+
+@pytest.mark.django_db
+def test_max_number_of_visits_must_be_over_zero():
+    with pytest.raises(ValidationError):
+        visitor = Visitor.objects.create(
+            email="foo@bar.com",
+            is_active=False,
+            max_number_of_visits=0,
+        )
+
+    assert Visitor.objects.exists() == False

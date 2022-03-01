@@ -14,6 +14,8 @@ from .settings import VISITOR_QUERYSTRING_KEY
 
 logger = logging.getLogger(__name__)
 
+#  each visitor link can be used a maximum number of times with the maximum uses allowed per visitor being set when the visitor is first created.
+
 
 class VisitorRequestMiddleware:
     """Extract visitor token from incoming request."""

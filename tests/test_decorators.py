@@ -121,3 +121,50 @@ class TestDecorators:
 
         _ = view(request)
         assert VisitorLog.objects.count() == 0
+
+    # able to access when max visits not reached is covered by other tests implicitly
+
+    def test_when_maximum_visits_reached_then_permission_denied(
+        self, visitor: Visitor
+    ) -> None:
+        visitor.max_number_of_visits = 2
+        visitor.save()
+        request = self._request(visitor=visitor)
+
+        @user_is_visitor(scope="foo")
+        def view(request: HttpRequest) -> HttpResponse:
+            return HttpResponse("OK")
+
+        response_1 = view(request)
+        response_2 = view(request)
+
+        for response in [response_1, response_2]:
+            assert response.status_code == 200
+            assert response.content == b"OK"
+
+        # assert throws on the 3rd attempt to access
+        with pytest.raises(PermissionDenied):
+            _ = view(request)
+
+    def test_when_maximum_visits_exceeded_then_permission_denied(
+        self, visitor: Visitor
+    ) -> None:
+        visitor.max_number_of_visits = 1
+        visitor.save()
+        request = self._request(visitor=visitor)
+
+        @user_is_visitor(scope="foo")
+        def view(request: HttpRequest) -> HttpResponse:
+            return HttpResponse("OK")
+
+        response = view(request)
+
+        with pytest.raises(PermissionDenied):
+            _ = view(request)
+
+        # assert throws on subsequent attempts to access
+        with pytest.raises(PermissionDenied):
+            _ = view(request)
+
+    # Would parameterise these better to test muliple different "max_number_of_visits"
+    # and large numbers of attempts to access

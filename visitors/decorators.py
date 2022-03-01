@@ -98,6 +98,15 @@ def user_is_visitor(  # noqa: C901
         if not request.user.is_visitor:
             raise PermissionDenied(_("Visitor access denied"))
 
+        # Check if the visitor is within their max allowed views of the link
+        if not request.visitor.is_within_max_visits:
+            # If not, deactivate and deny permissions
+            if request.visitor.is_active:
+                request.visitor.deactivate()
+            raise PermissionDenied(
+                _(f"Visitor access denied - maximum visits reached!")
+            )
+
         # Check the function scope matches (or is "*")
         if scope in (SCOPE_ANY, request.visitor.scope):
             response = view_func(*args, **kwargs)
